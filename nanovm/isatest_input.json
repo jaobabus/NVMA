@@ -1,8 +1,21 @@
 {
     "input": {
-
+        "op1": 0
     },
     "output": {
-
+        "store_op_result": 7,
+        "load_op_result": 7,
+        "jl_result": 5,
+        "jz_result": 7,
+        "add_result": 610838143,
+        "sub_result": 3989549056,
+        "and_result": 271864880,
+        "or_result": 322336381,
+        "load1_high_result": 305418247,
+        "load1_high_result2": 305419896,
+        "load1_low_result": 1656,
+        "lsl_result": 2328821760,
+        "lsr_result": 149130,
+        "pc_swp_result": 1365
     }
 }

@@ -1,20 +1,12 @@
 .input
-MEMORY 4, instruction
-MEMORY 4, operand1
-MEMORY 4, operand2
-MEMORY 4, operand3
-MEMORY 4, operand4
-MEMORY 4, operand5
-MEMORY 4, operand6
-MEMORY 4, operand7
+
+MEMORY 4, op1
 
 .output
 MEMORY 4, load_op_result
 MEMORY 4, store_op_result
 MEMORY 4, jl_result
 MEMORY 4, jz_result
-MEMORY 4, load1_low_result
-MEMORY 4, load1_high_result
 
 MEMORY 4, add_result
 MEMORY 4, sub_result
@@ -23,9 +15,72 @@ MEMORY 4, or_result
 MEMORY 4, lsl_result
 MEMORY 4, lsr_result
 
+MEMORY 4, load3_result
+MEMORY 4, load1_low_result
+MEMORY 4, load1_high_result
+MEMORY 4, load1_high_result2
+
 MEMORY 4, call_result
 MEMORY 4, pc_swp_result
-MEMORY 4, load3_result
+
+.data
+    MEMORY 4, a
 
 .code
+init:
+    LOAD3 7
+    STORE_OP store_op_result
 
+    LOAD_OP store_op_result
+    STORE_OP load_op_result
+
+    LOAD3 5
+    JL store_op_result, skip_if_jl
+        LOAD3 0
+    skip_if_jl:
+        STORE_OP jl_result
+
+    LOAD3 7
+    JZ store_op_result, skip_if_jz
+        LOAD3 0
+    skip_if_jz:
+        STORE_OP jz_result
+
+    LOAD_HIGH 0x12345
+    STORE_OP load1_high_result
+
+    LOAD_LOW 0x678
+    STORE_OP load1_low_result
+
+    LOAD_HIGH 0x12345
+    STORE_OP load1_high_result2
+
+    ADD add_result, load1_high_result, load1_high_result2
+
+    SUB sub_result, load1_low_result, load1_high_result2
+
+    LOAD_LOW 0x432
+    LOAD_HIGH 0x98765
+    AND and_result, load1_high_result2, lr
+
+    LOAD_LOW 0x445
+    LOAD_HIGH 0x11223
+    OR or_result, load1_high_result2, lr
+
+    LS lsl_result, load1_high_result2, 13
+
+    RS lsr_result, load1_high_result2, 11
+
+    LOAD_LOW 0x555
+    STORE_OP pc_swp_result
+
+    LOAD_LOW pc_check
+    PC_SWP lr, lr
+    LOAD_LOW 0x999
+    pc_check_return:
+        JZ lr, exit
+    pc_check:
+        JZ lr, pc_check_return
+
+exit:
+    HALT

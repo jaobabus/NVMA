@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 from bitstring import BitArray
 
-from memory import MemoryFragment, MemoryRegion
+from memory import MemoryFragment, MemoryRegion, SourcePos
 
 
 @dataclass()
@@ -36,7 +36,7 @@ class InstructionDesc:
     length: int
     args_cathegories: dict[str, ArgCathegory]
 
-    def encode(self, position: int | None, args: dict[str, int | str]) -> MemoryFragment:
+    def encode(self, position: SourcePos, args: dict[str, int | str]) -> MemoryFragment:
         raise NotImplementedError()
 
     def decode(self, value: bytes) -> dict[str, int]:
@@ -51,14 +51,18 @@ class BuilderDescImpl(InstructionDesc):
     handlers: dict[str, BitFrag]
     consts: dict[str, tuple[BitFrag, int]]
 
-    def encode(self, position: int | None, args: dict[str, int | str]) -> MemoryFragment:
+    def encode(self, source_pos: SourcePos, args: dict[str, int | str]) -> MemoryFragment:
         data = BitArray(self.length * 8)
         if len(args) != len(set(args.keys()) | set(self.handlers.keys())):
             raise RuntimeError(f"Arguments lens not matches")
         for bits, value in self.consts.values():
             bits.encode(data, value)
         for name, arg in args.items():
-            self.handlers[name].encode(data, arg)
+            r = self.handlers[name].encode(data, arg)
+            if r:
+                bs = self.handlers[name].end - self.handlers[name].start
+                raise RuntimeError(f"Argument {name} value 0x{arg:02X} overflow of 0x{~(0xFFFFFF << bs) & 0xFFFFFF:02X}",
+                                   source_pos)
 
         @dataclass()
         class Frag(MemoryFragment):
@@ -77,8 +81,9 @@ class BuilderDescImpl(InstructionDesc):
         data.reverse()
         data_bytes = bytes(reversed(data.tobytes()))
 
-        return Frag(f"Op[{self.opcode}]@{position or 0:02X}",
-                    position,
+        return Frag(f"Op[{self.opcode}]@{source_pos}",
+                    None,
+                    source_pos,
                     data_bytes)
 
     def decode(self, value: bytes) -> dict[str, int]:
@@ -163,7 +168,8 @@ class InstructionDescBuilder:
                         _value |= v.decode(data)
                     return _value
 
-            return SequencedBitFrag(0, 0, seq)
+            top = sum(s.end - s.start for s in seq)
+            return SequencedBitFrag(0, top, seq)
 
         for key, seq in partial.items():
             seq = [val for part, val in sorted(seq.items(), key=lambda x: x[0])]
@@ -185,10 +191,10 @@ class MovInstruction(InstructionDesc):
                              'mem2': ArgCathegory.Register
                          })
 
-    def encode(self, position: int | None, args: dict[str, int | str]) -> MemoryFragment:
-        return MemoryRegion("mov", None, [
+    def encode(self, position: SourcePos, args: dict[str, int | str]) -> MemoryFragment:
+        return MemoryRegion("mov", None, position, [
             Instructions.LOAD_OP.encode(position, {'mem': args['mem2']}),
-            Instructions.STORE_OP.encode(position and position + 1 or position, {'mem': args['mem1']}),
+            Instructions.STORE_OP.encode(position, {'mem': args['mem1']}),
         ], 2, None)
 
     def check(self, value: bytes) -> tuple[bool, str]:
@@ -229,8 +235,9 @@ class Instructions:
 
     LOAD_HIGH = Builder(3, 3) \
                 .const_bits('is_high', 4, 5, 1) \
-                .arg_bits('low@1', 0, 4) \
-                .arg_bits('low@0', 8, 24) \
+                .arg_bits('low@2', 0, 4) \
+                .arg_bits('low@1', 8, 16) \
+                .arg_bits('low@0', 16, 24) \
                 .arg_cathegory('low', ArgCathegory.Const) \
                 .build()
 

@@ -12,7 +12,7 @@ except ImportError:
 
 import regex
 
-from memory import find_frag, MemoryRegion, MemoryData
+from memory import find_frag, MemoryRegion, MemoryData, UnknownSourcePos, MemoryFragment, SourcePos
 from compiler import NanoVMAsmParser, NanoVMMemoryObject
 from disasm import Disassembler
 
@@ -56,7 +56,7 @@ class NVMCompilerTask(BaseTask):
             buf = self._buffer.decode('utf-8')
             print(f"Compiling {buf[:64]}...")
             comp.init()
-            comp.process_file(buf)
+            comp.process_file(buf, '<input>')
             obj = comp.get_memory()
 
             json_obj = {
@@ -69,9 +69,14 @@ class NVMCompilerTask(BaseTask):
             self._output = ''.join(f"{v}\n" for _, v in json_obj.items()).encode('utf-8')
             print(f"Done")
 
-        except RuntimeError:
+        except RuntimeError as e:
             import traceback
-            self._output = f"error at {(comp.last_error_line or 0) + 1}: {traceback.format_exc()}".encode('utf-8')
+            pos = UnknownSourcePos
+            if len(e.args) > 1 and isinstance(e.args[1], MemoryFragment):
+                pos = e.args[1].source_pos
+            if len(e.args) > 1 and isinstance(e.args[1], SourcePos):
+                pos = e.args[1]
+            self._output = f"error at {pos}: {traceback.format_exc()}".encode('utf-8')
             print(f"Compile error at {(comp.last_error_line or 0) + 1}")
 
     def start(self):
@@ -113,10 +118,10 @@ class NVMDecompilerTask(BaseTask):
         fragments = []
         for k, v in zip(cd['k'], cd['v']):
             pos, size = map(int, v.split(':'))
-            fragments.append(MemoryData(k, pos, data[pos:pos+size]))
+            fragments.append(MemoryData(k, pos, UnknownSourcePos, data[pos:pos+size]))
 
         position = min([256, *[f.position if f.position is not None else 256 for f in fragments]])
-        return MemoryRegion(cd['name'][0], position != 256 and position or None, fragments, 256, 256)
+        return MemoryRegion(cd['name'][0], position != 256 and position or None, UnknownSourcePos, fragments, 256, 256)
 
     def _task(self):
         try:
@@ -135,14 +140,19 @@ class NVMDecompilerTask(BaseTask):
                 try:
                     find_frag(obj.ram, required)
                 except RuntimeError:
-                    obj.ram.fragments.append(MemoryRegion(required, None, [], 128, 128))
+                    obj.ram.fragments.append(MemoryRegion(required, None, UnknownSourcePos, [], 128, 128))
 
             decompiler = Disassembler(obj)
             self._output = decompiler.disassemble().encode('utf-8')
             print(f"Done")
-        except RuntimeError:
+        except RuntimeError as e:
             import traceback
-            self._output = f"error: {traceback.format_exc()}".encode('utf-8')
+            pos = UnknownSourcePos
+            if len(e.args) > 1 and isinstance(e.args[1], MemoryFragment):
+                pos = e.args[1].source_pos
+            if len(e.args) > 1 and isinstance(e.args[1], SourcePos):
+                pos = e.args[1]
+            self._output = f"error at {pos}: {traceback.format_exc()}".encode('utf-8')
             print(f"Decompile error")
 
     def start(self):

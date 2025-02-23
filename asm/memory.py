@@ -3,9 +3,21 @@ from dataclasses import dataclass
 
 
 @dataclass()
+class SourcePos:
+    file: str
+    line: int
+
+    def __str__(self):
+        return f"{self.file}:{self.line + 1}"
+
+UnknownSourcePos = SourcePos("<unknown>", 0)
+
+
+@dataclass()
 class MemoryFragment:
     name: str
     position: int | None
+    source_pos: SourcePos
 
     def eval_position(self, base: int) -> int:
         raise NotImplementedError()

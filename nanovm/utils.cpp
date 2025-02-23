@@ -47,10 +47,10 @@ uint32_t get_value32(const void* ram, const NVMAObject::Section& sec, const std:
 
 void parse_section(NVMAObject::Section& master_section, NVMAObject::Section& section, const nlohmann::json::object_t& binding)
 {
-    for (auto& [name, value] : binding)
+    for (auto& [name, jvalue] : binding)
     {
         auto full_name = section.name + "." + name;
-        if (not value.is_number()) {
+        if (not jvalue.is_number() and not jvalue.is_string()) {
             throw std::runtime_error("Type of " + full_name + " not supported");
         }
         if (not section.labels.count(name)) {
@@ -60,11 +60,25 @@ void parse_section(NVMAObject::Section& master_section, NVMAObject::Section& sec
             throw std::runtime_error("Size not 4 not supported");
         }
 
-        unsigned u_value = *(value.get_ptr<const nlohmann::json::number_unsigned_t*>()
-                             ? value.get_ptr<const nlohmann::json::number_unsigned_t*>()
-                             : (const nlohmann::json::number_unsigned_t*)
-                               value.get_ptr<const nlohmann::json::number_integer_t*>());
-        std::memcpy(master_section.data.data() + section.labels.at(name).pos, &u_value, 4);
+        uint32_t uvalue;
+        if (jvalue.is_string()) {
+            auto svalue = *jvalue.get_ptr<const nlohmann::json::string_t*>();
+            if (svalue.substr(0, 2) == "0x"
+                    or svalue.substr(0, 2) == "0X") {
+                uvalue = std::stoul(svalue.substr(2), nullptr, 16);
+            }
+            else {
+                uvalue = std::stoul(svalue.substr(2));
+            }
+        }
+        else if (jvalue.is_number()) {
+            uvalue = *(jvalue.get_ptr<const nlohmann::json::number_unsigned_t*>()
+                       ? jvalue.get_ptr<const nlohmann::json::number_unsigned_t*>()
+                       : (const nlohmann::json::number_unsigned_t*)
+                         jvalue.get_ptr<const nlohmann::json::number_integer_t*>());
+        }
+
+        std::memcpy(master_section.data.data() + section.labels.at(name).pos, &uvalue, 4);
     }
 }
 
@@ -82,7 +96,7 @@ void parse_sections_file(NVMAObject& obj, const std::string& content)
             throw std::runtime_error("Section " + name + " is not object");
 
         if (NVMAObject::sections_mapping.count(name))
-            parse_section(obj.*NVMAObject::sections_mapping.at(name),
+            parse_section(obj.ram,
                           obj.*NVMAObject::sections_mapping.at(name),
                           *bind);
         else

@@ -122,7 +122,7 @@ public:
             auto first = key.substr(0, key.find('.'));
             auto secont = key.substr(key.find('.') + 1);
             if (NVMAObject::sections_mapping.count(name))
-                ref_value32(obj.*NVMAObject::sections_mapping.at(name),
+                ref_value32(obj.ram,
                             obj.*NVMAObject::sections_mapping.at(name),
                             name) = value;
             else
@@ -155,10 +155,10 @@ public:
     {
         for (auto [name, label] : obj.output.labels)
         {
-            if (get_value32(ram, obj.output, name) != get_value32(obj.ram, obj.output, name))
+            auto v = get_value32(ram, obj.output, name);
+            auto e = get_value32(obj.ram, obj.output, name);
+            if (v != e)
             {
-                auto v = get_value32(ram, obj.output, name);
-                auto e = get_value32(obj.ram, obj.output, name);
                 std::cerr << "In output variable " << name
                           << " value " << v
                           << " not match with expected " << e

@@ -74,6 +74,7 @@ private:
     }
 
     std::string format_line(const DecompiledLine& line,
+                            const uint32_t* prev_ram,
                             bool is_current)
     {
         std::ostringstream oss;
@@ -87,7 +88,12 @@ private:
             for (auto& arg : line.args) {
                 oss << arg;
                 if (all_labels.count(arg)) {
-                    oss << "[0x" << fhex(ram[all_labels[arg].pos / 4], 8) << "]";
+                    auto pos = all_labels[arg].pos / 4;
+                    oss << "[";
+                    if (prev_ram and ram[pos] != prev_ram[pos])
+                        oss << "0x" << fhex(prev_ram[pos], 8) << "->";
+                    oss << "0x" << fhex(ram[pos], 8);
+                    oss << "]";
                 }
                 if (&arg != &line.args.back())
                     oss << ", ";
@@ -111,9 +117,11 @@ private:
             running = false;
             return;
         }
+        uint32_t prev_ram[sizeof(ram) / 4];
+        std::memcpy(prev_ram, ram, sizeof(ram));
         auto prev = pc;
         execute_one(ram, obj.text.data.data(), pc, nullptr);
-        std::cout << format_line(get_decompiled_map().at(prev), true) << std::endl;
+        std::cout << format_line(get_decompiled_map().at(prev), prev_ram, true) << std::endl;
     }
 
     void go_to(const std::string& command)
@@ -204,7 +212,7 @@ private:
         std::cout << "Listing instructions:" << std::endl;
 
         for (auto current = start; current != end; ++current) {
-            std::cout << format_line(*current, current == it) << std::endl;
+            std::cout << format_line(*current, nullptr, current == it) << std::endl;
         }
     }
 

@@ -14,13 +14,17 @@ bool execute_one(uint32_t* ram,
     uint8_t opcode = (header >> 5);
     uint32_t long_arg = ((uint32_t)(header & 0x1F) << 16) | ((uint16_t)code[pc + 1] << 8) | (code[pc + 2]);
     pc += opcodes_sizes[opcode];
-    if (opcode == LoadOp) {
+
+    if (opcode == LoadOp)
+    {
         ram[0] = ram[header & 0x1F];
     }
-    else if (opcode == StoreOp) {
+    else if (opcode == StoreOp)
+    {
         ram[header & 0x1F] = ram[0];
     }
-    else if (opcode == Jump) {
+    else if (opcode == Jump)
+    {
         uint8_t next_pc = (long_arg >> 8) & 0xFF;
         if (header & 0x10) {
             if (ram[0] < ram[header & 0xF])
@@ -31,21 +35,24 @@ bool execute_one(uint32_t* ram,
                 pc = next_pc;
         }
     }
-    else if (opcode == Load1) {
+    else if (opcode == Load1)
+    {
         uint32_t lr = ram[0];
         if (header & 0x10) {
-            lr = long_arg << 12;
+            auto arg = long_arg << 12;
+            lr = (lr & 0xFFF) | arg;
             pc++;
         }
         else {
-            lr = (lr & ~0xFFF) | (long_arg >> 8) & 0xFFF;
+            lr = (long_arg >> 8) & 0xFFF;
         }
         ram[0] = lr;
     }
     else if (opcode <= Shift)
     {
         long_arg >>= 8;
-        uint32_t mem2 = ram[long_arg & 0xF];
+        uint32_t arg = long_arg & 0xF;
+        uint32_t mem2 = ram[arg];
         long_arg >>= 4;
         uint32_t mem1 = ram[long_arg & 0xF];
         long_arg >>= 4;
@@ -64,14 +71,15 @@ bool execute_one(uint32_t* ram,
             break;
         case Shift:
             if (long_arg & 0x10)
-                mem1 = mem1 >> mem2;
+                mem1 = mem1 >> arg;
             else
-                mem1 = mem1 << mem2;
+                mem1 = mem1 << arg;
             break;
         }
         ram[long_arg & 0xF] = mem1;
     }
-    else { // opcode == Extra
+    else // opcode == Extra
+    {
         if (header & 0x10) {
             if (header & 0x08) {
                 if (header & 0x04) // HALT or unknown
