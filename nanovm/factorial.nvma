@@ -1,0 +1,75 @@
+.input
+MEMORY 4, n
+
+.output
+MEMORY 4, result
+
+.data
+MEMORY 4, zero
+MEMORY 4, one
+MEMORY 4, counter
+MEMORY 4, accum
+
+MEMORY 4, tmp1
+MEMORY 4, tmp2
+MEMORY 4, return
+
+
+.code
+
+init:
+    LOAD3 0
+    STORE_OP zero
+    LOAD3 1
+    STORE_OP one
+    JZ lr, factorial
+
+
+multiply: ; lr (tmp1 a, tmp2 b)
+    ; lr = a
+    ; a = 0
+    ; while (lr > 0) {
+    ;    a += b
+    ;    lr--
+    ; }
+    ; return a
+
+    LOAD_OP tmp1
+    AND tmp1, tmp1, zero
+
+    multipy_loop:
+    JZ zero, multiply_end
+        ADD tmp1, tmp1, tmp2
+        SUB lr, lr, one
+        JZ lr, multipy_loop
+    multiply_end:
+    LOAD_OP tmp1
+    PC_SWP return, return
+
+
+factorial: ; result (n)
+    ; result = 1
+    ; counter = n
+    ; while (counter > 0) {
+    ;    result *= counter
+    ; }
+
+    MOV result, one
+    MOV counter, n
+
+    loop:
+    LOAD3 0
+    JZ counter, end
+        MOV tmp1, counter
+        MOV tmp2, result
+        LOAD3 0
+        LOAD_LOW multiply
+        PC_SWP return, lr
+        STORE_OP result
+
+        SUB counter, counter, one
+        JZ lr, loop
+
+
+end:
+HALT

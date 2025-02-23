@@ -1,0 +1,31 @@
+.input
+MEMORY 4, instruction
+MEMORY 4, operand1
+MEMORY 4, operand2
+MEMORY 4, operand3
+MEMORY 4, operand4
+MEMORY 4, operand5
+MEMORY 4, operand6
+MEMORY 4, operand7
+
+.output
+MEMORY 4, load_op_result
+MEMORY 4, store_op_result
+MEMORY 4, jl_result
+MEMORY 4, jz_result
+MEMORY 4, load1_low_result
+MEMORY 4, load1_high_result
+
+MEMORY 4, add_result
+MEMORY 4, sub_result
+MEMORY 4, and_result
+MEMORY 4, or_result
+MEMORY 4, lsl_result
+MEMORY 4, lsr_result
+
+MEMORY 4, call_result
+MEMORY 4, pc_swp_result
+MEMORY 4, load3_result
+
+.code
+

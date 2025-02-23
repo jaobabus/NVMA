@@ -1,0 +1,16 @@
+.input
+MEMORY 4, a
+MEMORY 4, b
+MEMORY 4, print_cb
+
+.output
+MEMORY 4, result
+
+.data
+MEMORY 4, temp
+
+.code
+start:
+  ADD result, a, b
+  CALL print_cb, temp, result
+  HALT
