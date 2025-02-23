@@ -39,15 +39,6 @@ public:
     }
 
 private:
-    static std::string fhex(uint64_t hex, int octets)
-    {
-        std::string out;
-        for (int i = octets - 1; i >= 0; i--) {
-            out += "0123456789ABCDEF"[(hex >> i * 4) & 0xF];
-        }
-        return out;
-    }
-
     void process_command(const std::string& command)
     {
         if (command == "step" or command == "n") {
@@ -97,6 +88,12 @@ private:
                 }
                 if (&arg != &line.args.back())
                     oss << ", ";
+            }
+            if (instructions_with_lr.count(line.command)) {
+                oss << " | lr[";
+                if (prev_ram and ram[0] != prev_ram[0])
+                    oss << "0x" << fhex(prev_ram[0], 8) << "->";
+                oss << "0x" << fhex(ram[0], 8) << "]";
             }
         }
         else {
@@ -244,6 +241,14 @@ private:
         }
         return decompiled_map_cache;
     }
+
+private:
+    inline const static std::map<std::string, bool> instructions_with_lr = {
+        {"LOAD_OP", true}, {"STORE_OP", true},
+        {"LOAD_LOW", true}, {"LOAD_HIGH", true},
+        {"JZ", true}, {"JL", true},
+        {"LOAD3", true}
+    };
 
 private:
     NVMAObject& obj;

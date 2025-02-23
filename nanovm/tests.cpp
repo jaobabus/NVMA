@@ -153,17 +153,24 @@ public:
 
     void dump_error(const uint32_t* ram) const override
     {
-        for (auto [name, label] : obj.output.labels)
+        int max = -1;
+        for (auto& [name, label] : obj.output.labels)
+            max = std::max<int>(name.size(), max);
+
+        for (auto& [name, label] : obj.output.labels)
         {
             auto v = get_value32(ram, obj.output, name);
             auto e = get_value32(obj.ram, obj.output, name);
-            if (v != e)
-            {
-                std::cerr << "In output variable " << name
-                          << " value " << v
-                          << " not match with expected " << e
-                          << std::endl;
-            }
+
+            const std::string ok_color = "\033[1;38;5;118m";
+            const std::string er_color = "\033[1;38;5;160m";
+            const std::string wn_color = "\033[1;38;5;184m";
+            auto pd = std::string(max - name.size(), ' ');
+            std::cerr
+                    << (v == e ? ok_color + "OK\033[0m   : " : er_color + "ERROR\033[0m: ")
+                    << pd << name << ": "
+                    << "got=" << (v == e ? "" : er_color) << "0x" << fhex(v, 8) << "\033[0m" << ", "
+                    << "exp=" << (v == e ? "" : wn_color) << "0x" << fhex(e, 8) << "\033[0m" << std::endl;
         }
     }
 

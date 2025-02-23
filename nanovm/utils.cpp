@@ -44,6 +44,16 @@ uint32_t get_value32(const void* ram, const NVMAObject::Section& sec, const std:
 }
 
 
+std::string fhex(uint64_t hex, int octets)
+{
+    std::string out;
+    for (int i = octets - 1; i >= 0; i--) {
+        out += "0123456789ABCDEF"[(hex >> i * 4) & 0xF];
+    }
+    return out;
+}
+
+
 
 void parse_section(NVMAObject::Section& master_section, NVMAObject::Section& section, const nlohmann::json::object_t& binding)
 {
@@ -81,6 +91,7 @@ void parse_section(NVMAObject::Section& master_section, NVMAObject::Section& sec
         std::memcpy(master_section.data.data() + section.labels.at(name).pos, &uvalue, 4);
     }
 }
+
 
 void parse_sections_file(NVMAObject& obj, const std::string& content)
 {

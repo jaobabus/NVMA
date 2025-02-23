@@ -285,8 +285,8 @@ class Instructions:
 
     CALL      = Builder(7, 2) \
                 .const_bits('extend', 4, 5, 0) \
-                .arg_bits('callback', 0, 4) \
-                .arg_bits('result', 12, 16) \
+                .arg_bits('result', 0, 4) \
+                .arg_bits('callback', 12, 16) \
                 .arg_bits('arg', 8, 12) \
                 .build()
 

@@ -18,6 +18,7 @@ uint32_t get_value32(const NVMAObject::Section& master, const NVMAObject::Sectio
 uint32_t& ref_value32(void* ram, const NVMAObject::Section& sec, const std::string& name);
 uint32_t get_value32(const void* ram, const NVMAObject::Section& sec, const std::string& name);
 
+std::string fhex(uint64_t hex, int octets);
 
 void parse_section(NVMAObject::Section& master_section,
                    NVMAObject::Section& section,

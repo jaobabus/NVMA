@@ -8,6 +8,11 @@
  > `LR = *mem`
  > Загрузка из памяти во временный регистр, назовем его LR
  > `[ 0: bit[3] ] [ mem: bit[5] ]`
+ 
+```
+
+ff
+```
 
 #### STORE_OP mem
  - `LR = *mem`
@@ -53,7 +58,7 @@
 `[ 6: bit[3] ] [ 1: bit ] [ result: bit[4] ] [ mem: bit[4] ] [ count: bit[4] ]`
 
 15) `CALL callback, result, arg` (C++: auto cb = reinterpret_cast<uint32_t(*)()>(*callback); *result = cb(*arg);) - вызвать функцию хостовой системы с аргументом arg и положить результат в result
-`[ 7: bit[3] ] [ 0: bit ] [ callback: bit[4] ] [ result: bit[4] ] [ arg: bit[4] ]`
+`[ 7: bit[3] ] [ 0: bit ] [ result: bit[4] ] [ callback: bit[4] ] [ arg: bit[4] ]`
 
 16) `PC_SWP mem, save` (*save = pc; pc = mem) - сохранить pc и установить его новое значение
 `[ 7: bit[3] ] [ 1: bit ] [ 1: bit ] [ 0: bit ] [ mem: bit[5] ] [ save: bit[5] ]`
