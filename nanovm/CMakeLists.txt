@@ -11,7 +11,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_library(nanovm
     vmop.hpp
     exec.cpp
-    runtime_compiler.hpp
     Readme.md)
 
 # target_compile_options(nanovm PUBLIC "-fsanitize=address")
@@ -20,6 +19,7 @@ add_library(nanovm
 
 
 add_library(utils
+    runtime_compiler.hpp
     utils.hpp utils.cpp)
 
 
@@ -47,3 +47,10 @@ configure_file("${CMAKE_SOURCE_DIR}/isatest_input.json"
                "${CMAKE_BINARY_DIR}/isatest_input.json")
 
 target_link_libraries(tests PUBLIC nanovm utils)
+
+
+
+add_executable(compile
+    compile.cpp)
+
+target_link_libraries(compile PUBLIC nanovm utils)

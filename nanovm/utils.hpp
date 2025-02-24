@@ -2,6 +2,7 @@
 
 #include <cstring>
 #include <string>
+#include <functional>
 
 #include <nlohmann/json.hpp>
 
@@ -25,3 +26,16 @@ void parse_section(NVMAObject::Section& master_section,
                    const nlohmann::json::object_t& binding);
 
 void parse_sections_file(NVMAObject& obj, const std::string& content);
+
+void parse_args(const char* optargs,
+                int argc,
+                char* argv[],
+                std::function<void (char, const std::string&)> fn);
+
+
+
+std::string format_line(const DecompiledLine& line,
+                        const uint32_t* ram,
+                        const uint32_t* prev_ram,
+                        const std::map<std::string, NVMAObject::Label>& all_labels,
+                        bool is_current);

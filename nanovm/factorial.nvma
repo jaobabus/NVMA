@@ -62,7 +62,6 @@ factorial: ; result (n)
     JZ counter, end
         MOV tmp1, counter
         MOV tmp2, result
-        LOAD3 0
         LOAD_LOW multiply
         PC_SWP return, lr
         STORE_OP result

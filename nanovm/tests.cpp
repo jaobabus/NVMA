@@ -1,5 +1,7 @@
 
+#include <future>
 #include <iostream>
+#include <unistd.h>
 #include <vector>
 #include <memory>
 #include <getopt.h>
@@ -10,6 +12,8 @@
 
 
 
+
+std::mutex stdout_mutex;
 
 class AbstractNVMTest
 {
@@ -22,94 +26,13 @@ public:
 };
 
 
-class NVMFactorialTest : public AbstractNVMTest
-{
-public:
-    NVMFactorialTest()
-    {
-        auto c = R"(
-        .input
-        MEMORY 4, n
-        .output
-        MEMORY 4, result
-        .data
-        MEMORY 4, zero
-        MEMORY 4, one
-        MEMORY 4, counter
-        MEMORY 4, accum
-        MEMORY 4, tmp1
-        MEMORY 4, tmp2
-        MEMORY 4, return
-        .code
-        init:
-            LOAD3 0
-            STORE_OP zero
-            LOAD3 1
-            STORE_OP one
-            JZ lr, factorial
-        multiply:
-            LOAD_OP tmp1
-            AND tmp1, tmp1, zero
-        multipy_loop:
-            JZ zero, multiply_end
-            ADD tmp1, tmp1, tmp2
-            SUB lr, lr, one
-            JZ lr, multipy_loop
-        multiply_end:
-            LOAD_OP tmp1
-            PC_SWP return, return
-        factorial:
-            MOV result, one
-            MOV counter, n
-        loop:
-            LOAD3 0
-            JZ counter, end
-            MOV tmp1, counter
-            MOV tmp2, result
-            LOAD3 0
-            LOAD_LOW multiply
-            PC_SWP return, lr
-            STORE_OP result
-            SUB counter, counter, one
-            JZ lr, loop
-        end:
-            HALT
-        )";
-        obj = compile(c);
-        ref_value32(obj.ram, obj.input, "n") = 12;
-    }
-
-    std::string get_name() const override { return "Factorial of 12"; }
-
-    const NVMAObject& get_binary() const override
-    {
-        return obj;
-    }
-
-    bool check_result(const uint32_t* ram) const override
-    {
-        return get_value32(ram, obj.output, "result") == 479001600; // result should be 12! = 479001600
-    }
-
-    void dump_error(const uint32_t* ram) const override
-    {
-        auto value = get_value32(ram, obj.output, "result");
-        std::cerr << "Result " << value << " not match with expected " << 479001600 << std::endl;
-    }
-
-private:
-    NVMAObject obj;
-
-};
-
-
 class NVMTestFromFile : public AbstractNVMTest
 {
 public:
     NVMTestFromFile(const std::string& source,
                     const std::string& input,
                     const std::map<std::string, uint32_t>& values)
-        : name("Test from " + source)
+        : name(source)
     {
         obj = compile(load_file(source));
 
@@ -120,13 +43,13 @@ public:
             if (key.find('.') == key.npos)
                 throw std::runtime_error("Can't set value to section, use <section>.<label>=<value>");
             auto first = key.substr(0, key.find('.'));
-            auto secont = key.substr(key.find('.') + 1);
-            if (NVMAObject::sections_mapping.count(name))
+            auto second = key.substr(key.find('.') + 1);
+            if (NVMAObject::sections_mapping.count(first))
                 ref_value32(obj.ram,
-                            obj.*NVMAObject::sections_mapping.at(name),
-                            name) = value;
+                            obj.*NVMAObject::sections_mapping.at(first),
+                            second) = value;
             else
-                throw std::runtime_error("Unknown section " + name);
+                throw std::runtime_error("Unknown section " + first);
         }
     }
 
@@ -162,9 +85,9 @@ public:
             auto v = get_value32(ram, obj.output, name);
             auto e = get_value32(obj.ram, obj.output, name);
 
-            const std::string ok_color = "\033[1;38;5;118m";
-            const std::string er_color = "\033[1;38;5;160m";
-            const std::string wn_color = "\033[1;38;5;184m";
+            const std::string ok_color = "\033[38;5;118m";
+            const std::string er_color = "\033[38;5;196m";
+            const std::string wn_color = "\033[38;5;184m";
             auto pd = std::string(max - name.size(), ' ');
             std::cerr
                     << (v == e ? ok_color + "OK\033[0m   : " : er_color + "ERROR\033[0m: ")
@@ -181,27 +104,66 @@ private:
 };
 
 
-void run_test(const AbstractNVMTest& test)
+std::map<std::string, size_t> stdout_pos_map;
+size_t stdout_last_pos = 0;
+
+std::unique_lock<std::mutex> lock_stdout_for_test(const AbstractNVMTest& test)
 {
-    std::cout << "Running test: " << test.get_name() << "... ";
+    class StdoutLock : public std::unique_lock<std::mutex>
+    {
+    public:
+        StdoutLock(std::mutex& mtx)
+            : std::unique_lock<std::mutex>(mtx)
+        {
+            std::cout << "\033[s" << std::flush;
+        }
+        ~StdoutLock()
+        {
+            if (this->owns_lock()) {
+                std::cout << "\033[u" << std::flush;
+            }
+        }
+
+    };
+
+    auto lock = StdoutLock(stdout_mutex);
+
+    if (not stdout_pos_map.count(test.get_name())) {
+        stdout_pos_map.insert(std::make_pair(test.get_name(), ++stdout_last_pos));
+    }
+
+    std::cout << "\033[" << stdout_pos_map.at(test.get_name()) << "B" << std::flush;
+    return lock;
+}
+
+
+std::array<uint32_t, 32> run_test(const AbstractNVMTest& test, size_t pd)
+{
+    {
+        auto lock = lock_stdout_for_test(test);
+        std::cout << "Running test: " << test.get_name() << " ... ";
+    }
+
     const NVMAObject& obj = test.get_binary();
-    uint32_t ram[32] = {0};
+    std::array<uint32_t, 32> ram = {0};
     for (auto& [name, label] : obj.input.labels) {
         std::memcpy((uint8_t*)&ram + label.pos, obj.ram.data.data() + label.pos, 4);
     }
 
     if (obj.text.data.size())
-        execute(ram, obj.text.data.data(), 0, nullptr);
+        execute(ram.data(), obj.text.data.data(), 0, nullptr, nullptr);
     else
         throw std::runtime_error(".text section is empty");
 
-    if (test.check_result(ram)) {
-        std::cout << "\033[38;5;76m" << "PASSED" << "\033[0m" << std::endl;
+    auto lock = lock_stdout_for_test(test);
+    if (test.check_result(ram.data())) {
+        std::cout << "Running test: " << test.get_name() << " ... " << std::string(pd, ' ') << "\033[1;38;5;76m" << "PASSED" << "\033[0m" << std::endl;
     }
     else {
-        std::cerr << "\033[38;5;160m" << "FAILED" << "\033[0m" << std::endl;
-        test.dump_error(ram);
+        std::cerr << "Running test: " << test.get_name() << " ... " << std::string(pd, ' ') << "\033[1;38;5;160m" << "FAILED" << "\033[0m" << std::endl;
     }
+
+    return ram;
 }
 
 
@@ -220,28 +182,28 @@ struct Arguments
 Arguments parse_args(int argc, char* argv[])
 {
     Arguments args;
-    int c;
-    auto opts = "i:";
-    while ((c = getopt(argc, argv, opts)) != -1)
+    auto proc = [&] (char opt, const std::string& value)
     {
-        switch (c)
-        {
+        switch (opt) {
         case 'i': {
             std::string arg = optarg;
             if (arg.find(':') == arg.npos)
                 throw std::runtime_error("Expected -i <source>:<input>[:<name>=<value>]*");
 
-            auto source = arg.substr(0, arg.find(':'));
-            auto vars_start = arg.find(':', arg.find(':') + 1);
-            auto input = arg.substr(arg.find(':') + 1, vars_start);
+            auto source_end = arg.find(':');
+            auto input_end = arg.find(':', source_end + 1);
+
+            auto source = arg.substr(0, source_end);
+            auto input = arg.substr(source_end + 1, input_end - source_end - 1);
+            auto vars_start = input_end;
 
             Arguments::Source info{source, input};
             for (auto next = vars_start;
-                 vars_start != std::string::npos;
-                 vars_start = arg.find(':', vars_start + 1))
+                 next != std::string::npos;
+                 next = arg.find(':', next + 1))
             {
                 auto end = arg.find(':', next + 1);
-                auto pair = arg.substr(next, end - next);
+                auto pair = arg.substr(next + 1, end - next - 1);
                 auto eq_pos = pair.find('=');
 
                 if (eq_pos == std::string::npos)
@@ -254,7 +216,7 @@ Arguments parse_args(int argc, char* argv[])
                     uvalue = std::stoul(value.substr(2), nullptr, 16);
                 }
                 else {
-                    uvalue = std::stoul(value.substr(2));
+                    uvalue = std::stoul(value);
                 }
 
                 info.values.emplace(std::make_pair(pair.substr(0, eq_pos),
@@ -263,34 +225,11 @@ Arguments parse_args(int argc, char* argv[])
 
             args.sources.emplace_back(std::move(info));
         }   break;
-
-        case '?': {
-            auto pos = std::string(opts).find(optopt);
-            if (pos == std::string::npos) {
-                std::cerr << "Unknown option '"
-                          << (isprint(optopt) ? std::string(1, optopt) :
-                                                std::string("\\x")
-                                                + "0123456789ABDF"[optopt / 16]
-                                                + "0123456789ABDF"[optopt & 0xF] )
-                          << "'" << std::endl;
-                throw std::runtime_error("See above");
-            }
-            else if (opts[pos + 1] == ':') {
-                std::cerr << "Option " << optopt << " requires argument" << std::endl;
-                throw std::runtime_error("See above");
-            }
-            else {
-                std::cerr << "Unknown option error " << optopt << std::endl;
-                throw std::runtime_error("See above");
-            }
-            break;
         }
+    };
 
-        default:
-            std::cerr << "Unknown options error " << std::endl;
-            throw std::runtime_error("See above");
-        }
-    }
+    parse_args("i:", argc, argv, proc);
+
     return args;
 }
 
@@ -311,9 +250,33 @@ int main(int argc, char* argv[])
         return 1;
     }
 
+    auto max_name_size = 0;
+    for (const auto& test : tests)
+        max_name_size = std::max<size_t>(max_name_size, test->get_name().size());
+
+    std::vector<std::future<std::pair<AbstractNVMTest*, std::array<uint32_t, 32>>>> futures;
     for (const auto& test : tests)
     {
-        run_test(*test);
+        futures.push_back(std::async(std::launch::async,
+                          [&] () -> std::pair<AbstractNVMTest*, std::array<uint32_t, 32>>
+        {
+            return std::make_pair(test.get(), run_test(*test, max_name_size - test->get_name().size()));
+        }));
+    }
+
+    for (auto& future : futures) {
+        future.wait();
+    }
+
+    std::cerr << std::endl;
+
+    for (auto& future : futures) {
+        auto [test, ram] = future.get();
+        if (not test->check_result(ram.data())) {
+            std::cerr << "Results of test " << test->get_name() << ":" << std::endl;
+            test->dump_error(ram.data());
+            std::cerr << std::endl;
+        }
     }
 
     return 0;

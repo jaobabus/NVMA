@@ -50,7 +50,7 @@ bool execute_one(uint32_t* ram,
 
     if (opcode <= StoreOp)
     {
-        if (opcode == Load1) {
+        if (opcode == LoadOp) {
             ram[0] = ram[harg5];
         }
         else {
@@ -126,8 +126,8 @@ bool execute_one(uint32_t* ram,
             // PC_SWP
             auto arg2 = ((harg5 & 0x3) << 8) | code[pc];
 
-            auto new_pc = ram[arg2 & 0x1F];
-            ram[arg2 >> 5] = pc + 2;
+            auto new_pc = ram[arg2 >> 5];
+            ram[arg2 & 0x1F] = pc + 1;
             pc = new_pc;
         }
         else
@@ -141,9 +141,11 @@ bool execute_one(uint32_t* ram,
 void execute(uint32_t* ram,
              const void* text,
              uint8_t start,
-             uint32_t (*proc)(uint32_t proc_id, uint32_t arg))
+             uint32_t (*proc)(uint32_t proc_id, uint32_t arg),
+             uint8_t* exec_flag)
 {
     uint8_t pc = start;
     const uint8_t* code = reinterpret_cast<const uint8_t*>(text);
-    while (execute_one(ram, code, pc, proc)) {}
+    while ((not exec_flag or *exec_flag)
+           and execute_one(ram, code, pc, proc)) {}
 }

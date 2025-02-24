@@ -64,49 +64,6 @@ private:
         }
     }
 
-    std::string format_line(const DecompiledLine& line,
-                            const uint32_t* prev_ram,
-                            bool is_current)
-    {
-        std::ostringstream oss;
-        oss << "0123456789abcdef"[line.pos / 16] << "0123456789abcdef"[line.pos & 0xF] << ": ";
-        for (uint8_t b : line.code) {
-            oss << "0123456789abcdef"[b / 16] << "0123456789abcdef"[b & 0xF];
-        }
-        oss << std::string(8 - line.code.size() * 2, ' ');
-        if (is_current) {
-            oss << " -> " << line.command << " ";
-            for (auto& arg : line.args) {
-                oss << arg;
-                if (all_labels.count(arg)) {
-                    auto pos = all_labels[arg].pos / 4;
-                    oss << "[";
-                    if (prev_ram and ram[pos] != prev_ram[pos])
-                        oss << "0x" << fhex(prev_ram[pos], 8) << "->";
-                    oss << "0x" << fhex(ram[pos], 8);
-                    oss << "]";
-                }
-                if (&arg != &line.args.back())
-                    oss << ", ";
-            }
-            if (instructions_with_lr.count(line.command)) {
-                oss << " | lr[";
-                if (prev_ram and ram[0] != prev_ram[0])
-                    oss << "0x" << fhex(prev_ram[0], 8) << "->";
-                oss << "0x" << fhex(ram[0], 8) << "]";
-            }
-        }
-        else {
-            oss << "    " << line.command << " ";
-            for (auto& arg : line.args) {
-                oss << arg;
-                if (&arg != &line.args.back())
-                    oss << ", ";
-            }
-        }
-        return oss.str();
-    }
-
     void step()
     {
         if (pc >= obj.text.data.size()) {
@@ -118,7 +75,7 @@ private:
         std::memcpy(prev_ram, ram, sizeof(ram));
         auto prev = pc;
         execute_one(ram, obj.text.data.data(), pc, nullptr);
-        std::cout << format_line(get_decompiled_map().at(prev), prev_ram, true) << std::endl;
+        std::cout << format_line(get_decompiled_map().at(prev), ram, nullptr, all_labels, true) << std::endl;
     }
 
     void go_to(const std::string& command)
@@ -209,7 +166,7 @@ private:
         std::cout << "Listing instructions:" << std::endl;
 
         for (auto current = start; current != end; ++current) {
-            std::cout << format_line(*current, nullptr, current == it) << std::endl;
+            std::cout << format_line(*current, ram, nullptr, all_labels, current == it) << std::endl;
         }
     }
 
@@ -218,6 +175,7 @@ private:
         if (decompiled_cache.empty()) {
             try {
                 decompiled_cache = decompile(obj);
+                all_labels["lr"] = NVMAObject::Label{"lr", 0, 4};
                 for (auto psec : NVMAObject::sections) {
                     auto& sec = obj.*psec;
                     for (auto& [k, v] : sec.labels)
@@ -241,14 +199,6 @@ private:
         }
         return decompiled_map_cache;
     }
-
-private:
-    inline const static std::map<std::string, bool> instructions_with_lr = {
-        {"LOAD_OP", true}, {"STORE_OP", true},
-        {"LOAD_LOW", true}, {"LOAD_HIGH", true},
-        {"JZ", true}, {"JL", true},
-        {"LOAD3", true}
-    };
 
 private:
     NVMAObject& obj;
@@ -284,56 +234,34 @@ struct Arguments
 };
 
 
-int parse_args(Arguments& args, int argc, char* argv[])
+Arguments parse_args(int argc, char* argv[])
 {
-    int c;
-    auto opts = "i:I:";
-    while ((c = getopt(argc, argv, opts)) != -1)
+    Arguments args;
+    auto proc = [&] (char opt, const std::string& value)
     {
-        switch (c)
-        {
+        switch (opt) {
         case 'i':
             args.source = optarg;
             break;
         case 'I':
             args.binding = optarg;
             break;
-        case '?': {
-            auto pos = std::string(opts).find(optopt);
-            if (pos == std::string::npos) {
-                std::cerr << "Unknown option '"
-                          << (isprint(optopt) ? std::string(1, optopt) :
-                                                std::string("\\x")
-                                                + "0123456789ABDF"[optopt / 16]
-                                                + "0123456789ABDF"[optopt & 0xF] )
-                          << "'" << std::endl;
-            }
-            else if (opts[pos + 1] == ':') {
-                std::cerr << "Option " << optopt << " requires argument" << std::endl;
-            }
-            else {
-                std::cerr << "Unknown option error " << optopt << std::endl;
-            }
-            break;
         }
-        default:
-            std::cerr << "Unknown options error " << std::endl;
-            return 1;
-        }
-    }
-    return 0;
+    };
+
+    parse_args("i:I:", argc, argv, proc);
+
+    return args;
 }
 
 
 int main(int argc, char* argv[]) {
-    Arguments args;
-    if (parse_args(args, argc, argv) != 0)
-        return 1;
-
     signal(SIGINT, sigint_signal);
 
+    Arguments args;
     NVMAObject obj;
     try {
+        parse_args(argc, argv);
         auto code = load_file(args.source);
         obj = compile(code);
 

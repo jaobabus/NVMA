@@ -1,5 +1,7 @@
 #include "utils.hpp"
 
+#include <getopt.h>
+
 #include <stdexcept>
 
 
@@ -113,4 +115,106 @@ void parse_sections_file(NVMAObject& obj, const std::string& content)
         else
             throw std::runtime_error("Unknown section " + name);
     }
+}
+
+
+void parse_args(const char* optargs,
+                int argc,
+                char* argv[],
+                std::function<void (char opt, const std::string&)> fn)
+{
+    int c;
+    while ((c = getopt(argc, argv, optargs)) != -1)
+    {
+        switch (c)
+        {
+        case '?': {
+            auto pos = std::string(optargs).find((char)optopt);
+            if (pos == std::string::npos) {
+                std::cerr << "Unknown option '"
+                          << (isprint(optopt) ? std::string(1, optopt) :
+                                                std::string("\\x")
+                                                + "0123456789ABDF"[optopt / 16]
+                                                + "0123456789ABDF"[optopt & 0xF] )
+                          << "'" << std::endl;
+                throw std::runtime_error("See above");
+            }
+            else if (optargs[pos + 1] == ':') {
+                std::cerr << "Option " << optopt << " requires argument" << std::endl;
+                throw std::runtime_error("See above");
+            }
+            else {
+                std::cerr << "Unknown option error " << optopt << std::endl;
+                throw std::runtime_error("See above");
+            }
+            break;
+        }
+
+        default: {
+            auto pos = std::string(optargs).find((char)c);
+            if (pos != std::string::npos) {
+                if (optargs[pos + 1] == ':')
+                    fn(c, optarg);
+                else
+                    fn(c, "");
+            }
+            else {
+                throw std::runtime_error(std::string("Unknown option error ") + (char)optopt);
+            }
+        }
+        }
+    }
+}
+
+
+inline const static std::map<std::string, bool> instructions_with_lr = {
+    {"LOAD_OP", true}, {"STORE_OP", true},
+    {"LOAD_LOW", true}, {"LOAD_HIGH", true},
+    {"JZ", true}, {"JL", true},
+    {"LOAD3", true}
+};
+
+std::string format_line(const DecompiledLine& line,
+                        const uint32_t* ram,
+                        const uint32_t* prev_ram,
+                        const std::map<std::string, NVMAObject::Label>& all_labels,
+                        bool is_current)
+{
+    std::ostringstream oss;
+    oss << "0123456789abcdef"[line.pos / 16] << "0123456789abcdef"[line.pos & 0xF] << ": ";
+    for (uint8_t b : line.code) {
+        oss << "0123456789abcdef"[b / 16] << "0123456789abcdef"[b & 0xF];
+    }
+    oss << std::string(8 - line.code.size() * 2, ' ');
+    if (is_current) {
+        oss << " -> " << line.command << " ";
+        for (auto& arg : line.args) {
+            oss << arg;
+            if (ram and all_labels.count(arg)) {
+                auto pos = all_labels.at(arg).pos / 4;
+                oss << "[";
+                if (prev_ram and ram and ram[pos] != prev_ram[pos])
+                    oss << "0x" << fhex(prev_ram[pos], 8) << "->";
+                oss << "0x" << fhex(ram[pos], 8);
+                oss << "]";
+            }
+            if (&arg != &line.args.back())
+                oss << ", ";
+        }
+        if (ram and instructions_with_lr.count(line.command)) {
+            oss << " | lr[";
+            if (prev_ram and ram[0] != prev_ram[0])
+                oss << "0x" << fhex(prev_ram[0], 8) << "->";
+            oss << "0x" << fhex(ram[0], 8) << "]";
+        }
+    }
+    else {
+        oss << "    " << line.command << " ";
+        for (auto& arg : line.args) {
+            oss << arg;
+            if (&arg != &line.args.back())
+                oss << ", ";
+        }
+    }
+    return oss.str();
 }

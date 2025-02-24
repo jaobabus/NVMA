@@ -2,13 +2,14 @@ import typing
 
 from instruction import Instructions, BuilderDescImpl, ArgCathegory
 from compiler import NanoVMMemoryObject
-from memory import MemoryRegion, find_frag, MemoryFragment, MemoryData
+from memory import MemoryRegion, find_frag, MemoryFragment, MemoryData, MemoryOffset, UnknownSourcePos
 
 
 class Disassembler:
     def __init__(self, memory_object: NanoVMMemoryObject):
         self.memory = memory_object
         self.all_labels: dict[str, MemoryFragment] = {
+            'lr': MemoryOffset("lr", 0, UnknownSourcePos, 4),
             **{f.name: f for f in typing.cast(MemoryRegion, find_frag(self.memory.ram, 'input')).fragments},
             **{f.name: f for f in typing.cast(MemoryRegion, find_frag(self.memory.ram, 'data')).fragments},
             **{f.name: f for f in typing.cast(MemoryRegion, find_frag(self.memory.ram, 'output')).fragments},

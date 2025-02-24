@@ -72,37 +72,8 @@ inline std::ostream& operator<<(std::ostream& os, const NVMAObject& obj)
 }
 
 
-inline NVMAObject compile(const std::string& code)
+inline NVMAObject parse_nvma_object(std::string data)
 {
-    std::fstream compiler(mountpoint_compiler.data(), std::ios::in | std::ios::out);
-    if (not compiler.is_open())
-        throw std::runtime_error("Compiler not accessible");
-
-    compiler.write(code.data(), code.size());
-    compiler.write("\0", 1);
-
-    std::string data;
-    data.resize(4096); // max size 4096
-    auto end = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-    while (std::chrono::steady_clock::now() < end)
-    {
-        data[0] = '\0';
-        compiler.seekg(0, std::ios::end);
-        auto size = compiler.tellg();
-        compiler.seekg(0, std::ios::beg);
-        if (size)
-            compiler.read(data.data(), data.size());
-        if (data[0] != '\0')
-            break;
-        std::this_thread::sleep_for(std::chrono::milliseconds(33));
-    }
-
-    if (data[0] == '\0')
-        throw std::runtime_error("Compile timeout error");
-    data.resize(std::strlen(data.data()));
-    if (data.substr(0, 5) == "error")
-        throw std::runtime_error("Compile error: " + data);
-
     std::regex pattern(R"((\w+)((?: +[0-9A-Fa-f]{2})+| ),((?: +\w+=\d+:\d+)+| ))");
     std::regex label_pattern(R"( (\w+)=(\d+):(\d+))");
 
@@ -152,6 +123,41 @@ inline NVMAObject compile(const std::string& code)
     }
 
     return obj;
+}
+
+
+inline NVMAObject compile(const std::string& code)
+{
+    std::fstream compiler(mountpoint_compiler.data(), std::ios::in | std::ios::out);
+    if (not compiler.is_open())
+        throw std::runtime_error("Compiler not accessible");
+
+    compiler.write(code.data(), code.size());
+    compiler.write("\0", 1);
+
+    std::string data;
+    data.resize(4096); // max size 4096
+    auto end = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (std::chrono::steady_clock::now() < end)
+    {
+        data[0] = '\0';
+        compiler.seekg(0, std::ios::end);
+        auto size = compiler.tellg();
+        compiler.seekg(0, std::ios::beg);
+        if (size)
+            compiler.read(data.data(), data.size());
+        if (data[0] != '\0')
+            break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(33));
+    }
+
+    if (data[0] == '\0')
+        throw std::runtime_error("Compile timeout error");
+    data.resize(std::strlen(data.data()));
+    if (data.substr(0, 5) == "error")
+        throw std::runtime_error("Compile error: " + data);
+
+    return parse_nvma_object(data);
 }
 
 
